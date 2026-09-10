@@ -1,0 +1,3 @@
+# Windows portable wget binary (downloaded by windows/ensure-wget.ps1)
+vendor/wget/**
+!vendor/wget/.gitkeep

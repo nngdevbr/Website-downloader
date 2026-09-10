@@ -3,6 +3,7 @@ var crypto = require('crypto');
 var fs = require('fs');
 var path = require('path');
 var archive = require('../archiver');
+var wgetTools = require('./resolve');
 
 /**
  * Every download gets its own directory under downloads/, which keeps two
@@ -36,6 +37,16 @@ module.exports = (socket, data, onFinished) => {
     return null;
   }
 
+  var wgetBin = wgetTools.resolveWgetPath();
+  if (!wgetBin) {
+    send({
+      error: 'wget is not installed. On Windows run windows\\setup.bat (or: winget install JernejSimoncic.Wget). ' +
+             'On Linux: apt install wget. On macOS: brew install wget. You can also set WGET_PATH to the binary.'
+    });
+    done();
+    return null;
+  }
+
   var jobId = crypto.randomBytes(8).toString('hex');
   var jobDir = path.join(DOWNLOAD_ROOT, jobId);
   try {
@@ -48,12 +59,16 @@ module.exports = (socket, data, onFinished) => {
 
   // execFile rather than exec: the address is passed as a separate argument and
   // never reaches a shell, so it cannot be used to run other commands.
-  var child = execFile('wget', [
+  var child = execFile(wgetBin, [
     '-mkEpnp',
     '--no-if-modified-since',
     '--quota=' + QUOTA,
     target.href
-  ], { cwd: jobDir, maxBuffer: 32 * 1024 * 1024 });
+  ], {
+    cwd: jobDir,
+    maxBuffer: 32 * 1024 * 1024,
+    windowsHide: true
+  });
 
   var settled = false;
   var cancelled = false;
@@ -62,7 +77,7 @@ module.exports = (socket, data, onFinished) => {
 
   var timer = setTimeout(() => {
     timedOut = true;
-    child.kill();
+    wgetTools.stopProcess(child);
   }, TIMEOUT_MS);
 
   var fail = (message) => {
@@ -75,11 +90,11 @@ module.exports = (socket, data, onFinished) => {
   };
 
   // Fires when wget itself cannot be started, which on a fresh machine almost
-  // always means it is not installed.
+  // always means it is not installed or the resolved path is stale.
   child.on('error', (err) => {
     if (err.code === 'ENOENT') {
-      fail('wget is not installed on the server. Install it and restart the app: ' +
-           'apt install wget, brew install wget, or winget install JernejSimoncic.Wget');
+      fail('wget could not be started (' + wgetBin + '). Re-run windows\\setup.bat on Windows, ' +
+           'or install wget (apt/brew/winget) and restart the app.');
       return;
     }
     fail('Could not start the download: ' + err.message);
@@ -135,7 +150,7 @@ module.exports = (socket, data, onFinished) => {
   return {
     cancel: function () {
       cancelled = true;
-      child.kill();
+      wgetTools.stopProcess(child);
     }
   };
 };
@@ -201,7 +216,10 @@ function countFiles(directory) {
 function removeJobDir(directory) {
   var resolved = path.resolve(directory);
   var root = path.resolve(DOWNLOAD_ROOT);
-  if (resolved === root || !resolved.startsWith(root + path.sep)) {
+  // Windows paths are case-insensitive; normalize before the containment check.
+  var resolvedCmp = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  var rootCmp = process.platform === 'win32' ? root.toLowerCase() : root;
+  if (resolvedCmp === rootCmp || !resolvedCmp.startsWith(rootCmp + path.sep)) {
     console.error('Refusing to delete a path outside the downloads folder: ' + resolved);
     return;
   }

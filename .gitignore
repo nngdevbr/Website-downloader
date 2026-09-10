@@ -32,3 +32,10 @@ downloads
 
 # Archives generated for users
 public/sites/*.zip
+
+# Portable wget downloaded by windows/setup.bat
+vendor/wget/**
+!vendor/wget/.gitkeep
+
+# Built download packages
+dist/

@@ -14,7 +14,6 @@ if not exist "node_modules\" (
   call "%~dp0setup.bat"
 )
 
-REM Prefer portable wget shipped/downloaded under vendor\wget
 if exist "%CD%\vendor\wget\wget.exe" (
   set "WGET_PATH=%CD%\vendor\wget\wget.exe"
 )

@@ -1,7 +1,11 @@
 /**
  * Builds a ZIP users can download and run on Windows.
- * Output: dist/Website-Downloader-Windows.zip
+ * Output: dist/Website-Downloader-Windows.zip (+ SHA256SUMS.txt)
+ *
+ * Intentionally excludes any .exe and any script that downloads one — those
+ * patterns trigger browser Safe Browsing / SmartScreen false positives.
  */
+var crypto = require('crypto');
 var fs = require('fs');
 var path = require('path');
 var archiver = require('archiver');
@@ -9,6 +13,7 @@ var archiver = require('archiver');
 var ROOT = path.join(__dirname, '..');
 var OUT_DIR = path.join(ROOT, 'dist');
 var OUT_FILE = path.join(OUT_DIR, 'Website-Downloader-Windows.zip');
+var SUMS_FILE = path.join(OUT_DIR, 'SHA256SUMS.txt');
 
 var INCLUDE = [
   'app.js',
@@ -24,8 +29,7 @@ var INCLUDE = [
   'wget',
   'archiver',
   'public',
-  'windows',
-  'vendor'
+  'windows'
 ];
 
 var SKIP_NAMES = new Set([
@@ -33,18 +37,19 @@ var SKIP_NAMES = new Set([
   'downloads',
   'dist',
   '.git',
-  '.github'
+  '.github',
+  'vendor'
 ]);
 
 function shouldSkip(fullPath, name) {
   if (SKIP_NAMES.has(name)) return true;
-  if (name === '.zip' || name.endsWith('.zip')) {
-    // Keep intentional assets, skip generated site archives.
-    if (fullPath.indexOf(path.join('public', 'sites')) !== -1 && name !== '.gitkeep') {
-      return true;
-    }
+  if (/\.exe$/i.test(name)) return true;
+  if (/\.ps1$/i.test(name)) return true;
+  if (name.endsWith('.zip')) {
+    if (fullPath.indexOf(path.join('public', 'sites')) !== -1) return true;
   }
-  if (name === 'wget.exe') return true;
+  // Demo gif is large and unrelated to running the app.
+  if (name === 'Record.gif') return true;
   return false;
 }
 
@@ -70,7 +75,12 @@ var output = fs.createWriteStream(OUT_FILE);
 var archive = archiver('zip', { zlib: { level: 9 } });
 
 output.on('close', function () {
+  var hash = crypto.createHash('sha256').update(fs.readFileSync(OUT_FILE)).digest('hex');
+  var line = hash + '  Website-Downloader-Windows.zip\n';
+  fs.writeFileSync(SUMS_FILE, line);
   console.log('Created ' + OUT_FILE + ' (' + archive.pointer() + ' bytes)');
+  console.log('SHA256 ' + hash);
+  console.log('Wrote ' + SUMS_FILE);
 });
 
 archive.on('error', function (err) {

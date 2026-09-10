@@ -1,59 +1,53 @@
-# Website Downloader — pacote Windows
+# Website Downloader — pacote Windows (sem vírus / sem .exe externo)
 
-Este pacote deixa o app pronto para rodar no Windows sem depender de shell Linux.
+Este pacote **não baixa nem inclui** `wget.exe`. O alerta de “vírus” do
+navegador costuma ser falso positivo causado exatamente por scripts que
+baixam executáveis de terceiros — isso foi removido.
 
 ## Requisitos
 
 - Windows 10/11
-- [Node.js 16+](https://nodejs.org/) (marque a opção de adicionar ao PATH)
+- [Node.js LTS](https://nodejs.org/) (marque “Add to PATH”)
 
-## Instalação rápida
+## Instalação
 
-1. Extraia este ZIP
-2. Dê dois cliques em `windows\setup.bat`
-3. Dê dois cliques em `windows\start.bat`
-4. Abra no navegador: http://localhost:3000/
+1. Extraia o ZIP
+2. Duplo clique em `windows\setup.bat` (só roda `npm install`)
+3. Duplo clique em `windows\start.bat`
+4. Abra http://localhost:3000/
 
-O `setup.bat` instala as dependências npm e garante um `wget`:
+## Como funciona no Windows
 
-1. usa `wget` se já estiver no PATH  
-2. tenta instalar com `winget install JernejSimoncic.Wget`  
-3. se necessário, baixa um `wget.exe` portable em `vendor\wget\`
+- Se existir `wget` no sistema, ele é usado
+- Se não existir, o app usa um **downloader embutido em Node.js** (só JavaScript)
+- Nada de `Invoke-WebRequest` baixando `.exe`
+
+## Se o navegador ainda avisar
+
+Arquivos `.zip` novos no GitHub às vezes caem no Safe Browsing / SmartScreen
+por serem “pouco comuns”, não por malware.
+
+1. Prefira baixar pela página do GitHub (botão Download do arquivo), não de links estranhos
+2. Em “Mais informações” → “Baixar mesmo assim” / “Executar mesmo assim”
+3. Confira o checksum em `dist/SHA256SUMS.txt` se quiser validar o arquivo
 
 ## Uso
 
-1. Cole a URL do site (ex.: `https://example.com`)
+1. Cole a URL (ex.: `https://example.com`)
 2. Clique no botão de download
-3. Quando terminar, clique em **Download website assets** para baixar o ZIP
+3. Ao terminar, clique em **Download website assets**
 
 ## Variáveis opcionais
 
 | Variável | Padrão | Função |
 | --- | --- | --- |
 | `PORT` | `3000` | Porta do servidor |
-| `DOWNLOAD_QUOTA` | `100m` | Limite de tamanho do wget |
+| `DOWNLOAD_QUOTA` | `100m` | Limite de tamanho |
 | `DOWNLOAD_TIMEOUT_MS` | `300000` | Tempo máximo por download |
-| `WGET_PATH` | (auto) | Caminho absoluto do `wget.exe` |
-
-No PowerShell, antes de `start.bat`:
-
-```powershell
-$env:PORT = "3000"
-$env:WGET_PATH = "C:\caminho\para\wget.exe"
-```
+| `WGET_PATH` | (auto) | Só se você já tiver um wget instalado |
 
 ## Solução de problemas
 
-- **"wget is not installed"** → rode `windows\setup.bat` de novo, ou copie um `wget.exe` para `vendor\wget\wget.exe`
-- **"Node.js nao encontrado"** → reinstale o Node e reabra o terminal
-- **Porta em uso** → `$env:PORT = "3001"` e rode `windows\start.bat`
-- **Antivírus bloqueou wget.exe** → permita o arquivo em `vendor\wget\` ou instale via winget
-
-## Estrutura
-
-```
-windows\setup.bat        instalação
-windows\start.bat        inicia o servidor
-windows\ensure-wget.ps1  encontra/baixa wget
-vendor\wget\             wget portable (após setup)
-```
+- **"Node.js nao encontrado"** → instale o Node LTS e reabra o Explorer/terminal
+- **Porta em uso** → no PowerShell: `$env:PORT="3001"; windows\start.bat`
+- **Antivírus bloqueou o ZIP** → é falso positivo comum; o pacote só tem JS + `.bat` que chamam `npm`

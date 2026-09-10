@@ -37,17 +37,19 @@ Download the complete source code of any website (including all assets) 🔨.
 ## Requirements 📦
 
 - Node.js 16 or newer
-- `wget` on the `PATH` (or under `vendor/wget/`). The app shells out to it, and nothing will download without it:
+- Optional: `wget` on the `PATH`. When missing, the app uses a built-in Node.js downloader (recommended on Windows — no third-party `.exe`):
   - Debian/Ubuntu: `apt install wget`
   - macOS: `brew install wget`
-  - Windows: run `windows\setup.bat` (recommended), or `winget install JernejSimoncic.Wget`
+  - Windows: not required; `windows\setup.bat` only runs `npm install`
 
 ## Windows download (portable) 🪟
 
-1. Download **`Website-Downloader-Windows.zip`** from this repository’s `dist/` folder (or the release/PR artifacts).
+1. Download **`Website-Downloader-Windows.zip`** from `dist/` (see PR / artifacts).
 2. Extract the ZIP.
 3. Double-click `windows\setup.bat`, then `windows\start.bat`.
 4. Open [http://localhost:3000/](http://localhost:3000/).
+
+This package does **not** download `wget.exe`. Browser “virus” warnings on the old package were false positives from that pattern.
 
 Full Portuguese instructions: [`windows/README-WINDOWS.md`](windows/README-WINDOWS.md).
 
@@ -80,7 +82,7 @@ windows\start.bat
 | `PORT` | `3000` | Port the server listens on |
 | `DOWNLOAD_QUOTA` | `100m` | Size ceiling passed to wget, so one request cannot fill the disk |
 | `DOWNLOAD_TIMEOUT_MS` | `300000` | How long a single download may run before it is stopped |
-| `WGET_PATH` | (auto) | Absolute path to `wget` / `wget.exe` when it is not on `PATH` |
+| `WGET_PATH` | (auto) | Absolute path to `wget` when you want to force using it |
 
 
 

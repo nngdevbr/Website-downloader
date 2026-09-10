@@ -4,6 +4,7 @@ var fs = require('fs');
 var path = require('path');
 var archive = require('../archiver');
 var wgetTools = require('./resolve');
+var scrapeWithNode = require('./node-scraper');
 
 /**
  * Every download gets its own directory under downloads/, which keeps two
@@ -18,13 +19,9 @@ var QUOTA = process.env.DOWNLOAD_QUOTA || '100m';
 var TIMEOUT_MS = Number(process.env.DOWNLOAD_TIMEOUT_MS) || 5 * 60 * 1000;
 
 /**
- * wget --mirror --convert-links --adjust-extension --page-requisites
- * --no-parent http://example.org
- * --mirror – Makes (among other things) the download recursive.
- * --convert-links – convert all the links (also to stuff like CSS stylesheets) to relative, so it will be suitable for offline viewing.
- * --adjust-extension – Adds suitable extensions to filenames (html or css) depending on their content-type.
- * --page-requisites – Download things like CSS style-sheets and images required to properly display the page offline.
- * --no-parent – When recurring do not ascend to the parent directory. It useful for restricting the download to only a portion of the site.
+ * Prefer system wget when present. On Windows (and any machine without wget),
+ * fall back to a pure-Node scraper so we never download or run a random
+ * wget.exe — that pattern triggers SmartScreen / browser "virus" warnings.
  */
 module.exports = (socket, data, onFinished) => {
   var done = typeof onFinished === 'function' ? onFinished : function () {};
@@ -33,16 +30,6 @@ module.exports = (socket, data, onFinished) => {
   var target = parseTarget(data.website);
   if (!target) {
     send({ error: 'That does not look like a website address. Try something like https://example.com' });
-    done();
-    return null;
-  }
-
-  var wgetBin = wgetTools.resolveWgetPath();
-  if (!wgetBin) {
-    send({
-      error: 'wget is not installed. On Windows run windows\\setup.bat (or: winget install JernejSimoncic.Wget). ' +
-             'On Linux: apt install wget. On macOS: brew install wget. You can also set WGET_PATH to the binary.'
-    });
     done();
     return null;
   }
@@ -57,6 +44,16 @@ module.exports = (socket, data, onFinished) => {
     return null;
   }
 
+  var wgetBin = wgetTools.resolveWgetPath();
+  if (wgetBin) {
+    return runWithWget(socket, data, target, jobId, jobDir, wgetBin, send, done);
+  }
+
+  send({ progress: 'wget not found — using the built-in Node downloader.\n' });
+  return runWithNode(target, jobId, jobDir, send, done);
+};
+
+function runWithWget(socket, data, target, jobId, jobDir, wgetBin, send, done) {
   // execFile rather than exec: the address is passed as a separate argument and
   // never reaches a shell, so it cannot be used to run other commands.
   var child = execFile(wgetBin, [
@@ -89,12 +86,10 @@ module.exports = (socket, data, onFinished) => {
     done();
   };
 
-  // Fires when wget itself cannot be started, which on a fresh machine almost
-  // always means it is not installed or the resolved path is stale.
   child.on('error', (err) => {
     if (err.code === 'ENOENT') {
-      fail('wget could not be started (' + wgetBin + '). Re-run windows\\setup.bat on Windows, ' +
-           'or install wget (apt/brew/winget) and restart the app.');
+      fail('wget could not be started (' + wgetBin + '). Restart the app to use the built-in ' +
+           'Node downloader, or install wget (apt/brew/winget) and try again.');
       return;
     }
     fail('Could not start the download: ' + err.message);
@@ -122,10 +117,6 @@ module.exports = (socket, data, onFinished) => {
       return;
     }
 
-    // Trust the filesystem rather than wget's output. wget writes nothing at
-    // all for an off-site redirect, a robots.txt exclusion or a 403, and the
-    // previous approach of naming the folder from the first "Resolving" line
-    // then archived a directory that was never created.
     if (countFiles(jobDir) === 0) {
       fail('Nothing could be downloaded from ' + target.hostname + '. ' +
            explainFailure(stderrTail, code));
@@ -133,18 +124,7 @@ module.exports = (socket, data, onFinished) => {
     }
 
     settled = true;
-    send({ progress: 'Converting' });
-
-    var zipName = target.hostname.replace(/[^a-zA-Z0-9._-]/g, '_') + '-' + jobId;
-    archive(jobDir, zipName, (err, name) => {
-      removeJobDir(jobDir);
-      if (err) {
-        send({ error: 'The site downloaded but could not be compressed: ' + err.message });
-      } else {
-        send({ progress: 'Completed', file: name });
-      }
-      done();
-    });
+    finishArchive(jobDir, target, jobId, send, done);
   });
 
   return {
@@ -153,7 +133,55 @@ module.exports = (socket, data, onFinished) => {
       wgetTools.stopProcess(child);
     }
   };
-};
+}
+
+function runWithNode(target, jobId, jobDir, send, done) {
+  var handle = scrapeWithNode({
+    url: target.href,
+    directory: jobDir,
+    timeoutMs: TIMEOUT_MS,
+    maxBytes: parseQuotaBytes(QUOTA),
+    onProgress: function (text) {
+      send({ progress: text });
+    },
+    onDone: function (err) {
+      if (err) {
+        removeJobDir(jobDir);
+        // Cancelled disconnects should stay quiet.
+        if (/cancelled/i.test(err.message)) {
+          done();
+          return;
+        }
+        send({ error: err.message || String(err) });
+        done();
+        return;
+      }
+      if (countFiles(jobDir) === 0) {
+        removeJobDir(jobDir);
+        send({ error: 'Nothing could be downloaded from ' + target.hostname + '.' });
+        done();
+        return;
+      }
+      finishArchive(jobDir, target, jobId, send, done);
+    }
+  });
+
+  return handle;
+}
+
+function finishArchive(jobDir, target, jobId, send, done) {
+  send({ progress: 'Converting' });
+  var zipName = target.hostname.replace(/[^a-zA-Z0-9._-]/g, '_') + '-' + jobId;
+  archive(jobDir, zipName, (err, name) => {
+    removeJobDir(jobDir);
+    if (err) {
+      send({ error: 'The site downloaded but could not be compressed: ' + err.message });
+    } else {
+      send({ progress: 'Completed', file: name });
+    }
+    done();
+  });
+}
 
 /**
  * Accepts what the user typed and returns a URL only if it is a real http(s)
@@ -176,10 +204,6 @@ function parseTarget(input) {
   return url;
 }
 
-/**
- * wget's closing lines are usually a summary, so the last line is rarely the
- * reason anything failed. Prefer the last line that actually looks like one.
- */
 function explainFailure(lines, exitCode) {
   var interesting = /failed|unable|refused|denied|ERROR \d|error \d|robots|No such|not found|forbidden|timed out|giving up|Unsupported scheme/i;
   for (var i = lines.length - 1; i >= 0; i--) {
@@ -188,6 +212,18 @@ function explainFailure(lines, exitCode) {
   }
   if (exitCode === 8) return 'The server refused the request (it may block automated downloads).';
   return 'wget exited with code ' + exitCode + ' without saving any files.';
+}
+
+function parseQuotaBytes(quota) {
+  if (typeof quota !== 'string') return 100 * 1024 * 1024;
+  var match = /^(\d+)\s*([kmg])?$/i.exec(quota.trim());
+  if (!match) return 100 * 1024 * 1024;
+  var n = Number(match[1]);
+  var unit = (match[2] || '').toLowerCase();
+  if (unit === 'g') return n * 1024 * 1024 * 1024;
+  if (unit === 'm') return n * 1024 * 1024;
+  if (unit === 'k') return n * 1024;
+  return n;
 }
 
 function countFiles(directory) {
@@ -208,11 +244,6 @@ function countFiles(directory) {
   return total;
 }
 
-/**
- * Deletes a single job directory. The guard matters: the previous version
- * joined an empty string onto the app root and recursively deleted the whole
- * application whenever the hostname had not been captured yet.
- */
 function removeJobDir(directory) {
   var resolved = path.resolve(directory);
   var root = path.resolve(DOWNLOAD_ROOT);

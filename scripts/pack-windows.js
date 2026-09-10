@@ -38,13 +38,14 @@ var SKIP_NAMES = new Set([
   'dist',
   '.git',
   '.github',
-  'vendor'
+  'vendor',
+  'runtime'
 ]);
 
 function shouldSkip(fullPath, name) {
   if (SKIP_NAMES.has(name)) return true;
   if (/\.exe$/i.test(name)) return true;
-  if (/\.ps1$/i.test(name)) return true;
+  if (/\.ps1$/i.test(name) && name.toLowerCase() !== 'ensure-node.ps1') return true;
   if (name.endsWith('.zip')) {
     if (fullPath.indexOf(path.join('public', 'sites')) !== -1) return true;
   }

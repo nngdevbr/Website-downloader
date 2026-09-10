@@ -1,53 +1,32 @@
-# Website Downloader — pacote Windows (sem vírus / sem .exe externo)
+# Website Downloader — Windows
 
-Este pacote **não baixa nem inclui** `wget.exe`. O alerta de “vírus” do
-navegador costuma ser falso positivo causado exatamente por scripts que
-baixam executáveis de terceiros — isso foi removido.
+## Se o instalador do Node falhar
 
-## Requisitos
+Se aparecer:
 
-- Windows 10/11
-- [Node.js LTS](https://nodejs.org/) (marque “Add to PATH”)
+> The Windows Installer Service could not be accessed
 
-## Instalação
+**não use o instalador `.msi`**. Este pacote baixa o **Node portátil (ZIP oficial do nodejs.org)** automaticamente.
 
-1. Extraia o ZIP
-2. Duplo clique em `windows\setup.bat` (só roda `npm install`)
+## Passo a passo
+
+1. Extraia o ZIP deste app
+2. Duplo clique em `windows\setup.bat`
+   - Se não houver Node, ele baixa sozinho o ZIP oficial
 3. Duplo clique em `windows\start.bat`
 4. Abra http://localhost:3000/
 
-## Como funciona no Windows
+## Alternativa manual (se o download automático falhar)
 
-- Se existir `wget` no sistema, ele é usado
-- Se não existir, o app usa um **downloader embutido em Node.js** (só JavaScript)
-- Nada de `Invoke-WebRequest` baixando `.exe`
+1. Abra https://nodejs.org/en/download
+2. Baixe **Windows Binary (.zip)** 64-bit (não o installer)
+3. Extraia
+4. Copie o conteúdo para: `runtime\node\`  
+   (precisa existir `runtime\node\node.exe`)
+5. Rode `windows\setup.bat` e depois `windows\start.bat`
 
-## Se o navegador ainda avisar
+## Observações
 
-Arquivos `.zip` novos no GitHub às vezes caem no Safe Browsing / SmartScreen
-por serem “pouco comuns”, não por malware.
-
-1. Prefira baixar pela página do GitHub (botão Download do arquivo), não de links estranhos
-2. Em “Mais informações” → “Baixar mesmo assim” / “Executar mesmo assim”
-3. Confira o checksum em `dist/SHA256SUMS.txt` se quiser validar o arquivo
-
-## Uso
-
-1. Cole a URL (ex.: `https://example.com`)
-2. Clique no botão de download
-3. Ao terminar, clique em **Download website assets**
-
-## Variáveis opcionais
-
-| Variável | Padrão | Função |
-| --- | --- | --- |
-| `PORT` | `3000` | Porta do servidor |
-| `DOWNLOAD_QUOTA` | `100m` | Limite de tamanho |
-| `DOWNLOAD_TIMEOUT_MS` | `300000` | Tempo máximo por download |
-| `WGET_PATH` | (auto) | Só se você já tiver um wget instalado |
-
-## Solução de problemas
-
-- **"Node.js nao encontrado"** → instale o Node LTS e reabra o Explorer/terminal
-- **Porta em uso** → no PowerShell: `$env:PORT="3001"; windows\start.bat`
-- **Antivírus bloqueou o ZIP** → é falso positivo comum; o pacote só tem JS + `.bat` que chamam `npm`
+- Não precisa consertar o Windows Installer para usar este app
+- O ZIP do Node vem do site oficial `nodejs.org` (não é um exe de terceiros)
+- Para encerrar: na janela preta, `Ctrl+C`
